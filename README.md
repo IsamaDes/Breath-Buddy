@@ -2,6 +2,8 @@
 
 **Breath-Buddy** is a calming breathing companion that guides you through smooth inhale–exhale cycles to help you relax, focus, and recharge while working or studying.
 
+Link: https://breath-buddy.vercel.app/
+
 ---
 
 ## ✨ Features
