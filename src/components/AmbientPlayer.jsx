@@ -1,92 +1,127 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { searchSounds } from "../services/freesoundService";
+import { useLocation } from "react-router-dom";
 
-export default function AmbientPlayer() {
+const AmbientPlayer = () => {
+  const location = useLocation();
+  const selectedVoice = location.state?.voice || "";
+  const [voices, setVoices] = useState([]);
   const [phase, setPhase] = useState("inhale");
   const [scale, setScale] = useState(1);
   const [audio, setAudio] = useState(null);
   const [cycleCount, setCycleCount] = useState(0);
-
   const [sounds, setSounds] = useState([]);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [timers, setTimers] = useState([]);
 
-  // Fetch sounds
+
+
+  // Load available voices
+  useEffect(() => {
+    const loadVoices = () => setVoices(speechSynthesis.getVoices());
+    loadVoices();
+    speechSynthesis.onvoiceschanged = loadVoices;
+  }, []);
+
+  // Function to speak text
+  const speak = (text) => {
+    if (!selectedVoice || !text) return;
+    speechSynthesis.cancel(); // cancel ongoing utterances
+
+    const utterance = new SpeechSynthesisUtterance(text);
+
+    //use the voice selected selected from the voiceSelectionPage
+    const voice = voices.find((v) => v.name === selectedVoice);
+
+    if (voice) utterance.voice = voice;
+    utterance.rate = 0.9; // slower pace for meditation
+    utterance.pitch = 1;
+    speechSynthesis.speak(utterance);
+  };
+
+  // Fetch ambient sounds
   useEffect(() => {
     searchSounds("rain").then((res) => {
-      console.log("Fetched sounds:", res);
-      const validSounds = res?.filter((s) => s.previews?.["preview-hq-mp3"]);
-      console.log("Valid sounds:", validSounds);
+      if (!res) return;
+      const validSounds = res.filter((s) => s.previews?.["preview-hq-mp3"]);
       setSounds(validSounds);
     });
   }, []);
 
-  // Box breathing animation (4-4-4-4 pattern)
+  // Breathing cycle (4-4-4-4)
   useEffect(() => {
+    if (!selectedVoice || voices.length === 0) return;
+
     const phases = [
-      {
-        name: "inhale",
-        duration: 4000,
-        scale: 1.5,
-        transition: "transform 4s ease-in-out",
-      },
-      { name: "hold", duration: 4000, scale: 1.5, transition: "none" },
-      {
-        name: "exhale",
-        duration: 4000,
-        scale: 0.7,
-        transition: "transform 4s ease-in-out",
-      },
-      { name: "hold", duration: 4000, scale: 0.7, transition: "none" },
+      { name: "inhale", duration: 4000, scale: 1.5, text: "Breathe in" },
+      { name: "hold", duration: 4000, scale: 1.5, text: "Hold" },
+      { name: "exhale", duration: 4000, scale: 0.7, text: "Breathe out" },
+      { name: "hold", duration: 4000, scale: 0.7, text: "Hold" },
     ];
 
     let currentIndex = 0;
-
-    // Set initial state
-    setPhase("inhale");
-    setScale(0.7); // Start small
+    let timers = [];
 
     const runCycle = () => {
       const currentPhase = phases[currentIndex];
-
-      // Set phase first
       setPhase(currentPhase.name);
+      speak(currentPhase.text);
 
-      // For inhale and exhale, we want smooth scaling
-      // For hold, we just maintain the current scale
       if (currentPhase.name === "inhale" || currentPhase.name === "exhale") {
-        // Small delay to ensure phase is set before scale change
-        setTimeout(() => {
-          setScale(currentPhase.scale);
-        }, 50);
+        const t1 = setTimeout(() => setScale(currentPhase.scale), 50);
+        timers.push(t1);
       }
 
-      setTimeout(() => {
+      const t2 = setTimeout(() => {
         currentIndex = (currentIndex + 1) % phases.length;
-        if (currentIndex === 0) {
-          setCycleCount((prev) => prev + 1);
-        }
+        if (currentIndex === 0) setCycleCount((prev) => prev + 1);
         runCycle();
       }, currentPhase.duration);
+      timers.push(t2);
     };
 
-    // Start the cycle immediately
     runCycle();
 
-    return () => {};
-  }, []);
+    return () => {
+      timers.forEach(clearTimeout);
+      speechSynthesis.cancel();
+    };
+  }, [voices, selectedVoice]);
 
+  //Start meditation
+  const startMeditation = () => {
+    if (isPlaying) return;
+    setIsPlaying(true);
+    setCycleCount(0);
+    runCycle();
+  };
+
+  // Stop meditation
+  const stopMeditation = () => {
+    setIsPlaying(false);
+    timers.forEach(clearTimeout);
+    setTimers([]);
+    speechSynthesis.cancel();
+  };
+
+  // Ambient sound controls
   const playSound = (url) => {
     if (audio) audio.pause();
     const newAudio = new Audio(url);
     newAudio.loop = true;
-    newAudio.play().catch(() => {});
+    newAudio.play().catch(() => { });
     setAudio(newAudio);
   };
 
   const stopSound = () => {
-    if (audio) audio.pause();
+    if (audio) {
+      audio.pause();
+      audio.currentTime = 0; // reset so next play starts fresh
+    }
     setAudio(null);
   };
 
+  // UI helpers
   const getPhaseInstruction = () => {
     switch (phase) {
       case "inhale":
@@ -161,9 +196,7 @@ export default function AmbientPlayer() {
           <p className="text-3xl text-white font-light mb-2">
             {getPhaseInstruction()}
           </p>
-          <p className="text-lg text-gray-300">
-            {phase === "hold" ? "4 seconds" : "4 seconds"}
-          </p>
+          <p className="text-lg text-gray-300">4 seconds</p>
           <p className="text-sm text-gray-400 mt-2">Cycle: {cycleCount}</p>
         </div>
       </div>
@@ -177,6 +210,26 @@ export default function AmbientPlayer() {
         </p>
       </div>
 
+
+      <div className="flex gap-4">
+        <button
+          onClick={startMeditation}
+          disabled={isPlaying}
+          className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg shadow-lg disabled:opacity-50"
+        >
+          Start
+        </button>
+        <button
+          onClick={stopMeditation}
+          disabled={!isPlaying}
+          className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg shadow-lg disabled:opacity-50"
+        >
+          Stop
+        </button>
+      </div>
+
+
+      {/* Ambient Sounds */}
       <div className="w-full max-w-md">
         <h2 className="text-white text-xl font-semibold mb-4">
           Ambient Sounds
@@ -205,4 +258,20 @@ export default function AmbientPlayer() {
       </div>
     </div>
   );
-}
+};
+
+export default AmbientPlayer;
+
+
+
+
+
+
+
+
+
+
+
+
+
+

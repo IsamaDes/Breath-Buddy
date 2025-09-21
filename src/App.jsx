@@ -1,12 +1,17 @@
 // src/App.jsx
-
-import AmbientPlayer from "./components/AmbientPlayer";
+import { Routes, Route } from "react-router-dom";
+import VoiceSelectionPage from "./pages/VoiceSelectionPage";
+import AmbientPlayerPage from "./pages/AmbientPlayerPage";
 
 function App() {
   return (
-    <div>
-      <AmbientPlayer />
-    </div>
+    <Routes>
+      {/* Homepage */}
+      <Route path="/" element={<VoiceSelectionPage />} />
+
+      {/* Ambient player page */}
+      <Route path="/ambient" element={<AmbientPlayerPage />} />
+    </Routes>
   );
 }
 
